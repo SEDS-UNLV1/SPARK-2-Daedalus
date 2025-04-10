@@ -15,7 +15,29 @@ client = MongoClient("mongodb://localhost:27017/")
 db = client["sensor_database"]
 collection = db["sensor_data"]
 
-ser = serial.Serial('COM3', 9600)
+
+# defining a fake serial port for testing
+class FakeSerial:
+    def __init__(self, *args, **kwargs):
+        self.buffer = b""
+
+    def write(self, data):
+        print(f"Fake write: {data}")
+        self.buffer = b"ACK\n"
+
+    def read(self, size=1):
+        return self.buffer[:size]
+
+    def readline(self):
+        return b"ACK\n"
+
+    def close(self):
+        print("Fake port closed")
+
+# uncomment below for Arduino
+# ser = serial.Serial('COM3', 9600)
+# uncomment below for software testing (no arduino)
+ser = FakeSerial()
 
 plt.style.use('fivethirtyeight')
 fig, ax = plt.subplots()
