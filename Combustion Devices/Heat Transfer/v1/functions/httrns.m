@@ -1,0 +1,2 @@
+function hg = httrns(At, A, Cstar, R_nz, Dt, Cp, Pc_ns, g, sigma, Pr, Mu)
+hg = ((0.026 / (Dt ^ 0.2)) * (((Mu ^ 0.2) * Cp) / (Pr ^ 0.6)) * (((Pc_ns * g) / Cstar) ^ 0.8) * ((Dt / R_nz) ^ 0.1)) * ((At / A) ^ 0.9) * sigma;
