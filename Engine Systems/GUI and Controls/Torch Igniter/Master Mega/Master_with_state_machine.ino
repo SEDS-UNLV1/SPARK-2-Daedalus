@@ -1,13 +1,15 @@
-// Define the number of pressure transducers
-#define NUM_SENSORS 5
+// Define the number of pressure transducers plus thermocouple (A5)
+#define NUM_SENSORS 6
 
-// Array of analog pins connected to the transducers (A0 to A4)
-const int sensorPins[NUM_SENSORS] = {A0, A1, A2, A3, A4};
+// Array of analog pins connected to the transducers (A0 to A5)
+const int sensorPins[NUM_SENSORS] = {A0, A1, A2, A3, A4, A5};
 
 // Array to store raw analog readings, voltages, and pressures
 int rawValues[NUM_SENSORS];
 float voltages[NUM_SENSORS];
 float Pressures[NUM_SENSORS];
+float temperature;
+float temp_conversion;
 
 // Define SSR pins (using digital pins on Arduino Mega)
 const int FUEL_LINE_PIN = 2;    // SSR1: Fuel Line a,b
@@ -60,6 +62,20 @@ bool standaloneSparkOn = false;
 unsigned long lastPressureUpdate = 0;
 const unsigned long PRESSURE_UPDATE_INTERVAL = 10; // Update pressure every 50 ms
 unsigned long sequenceStartTime = 0; // To track when the sequence starts for timestamps
+
+
+// Define Thermocouple pin
+#define TC_PIN A5
+// Set to ADC pin used
+#define AREF 5 // 3.3 or 5 V
+#define ADC_RESOLUTION 10 // set to ADC bit resolution
+
+
+
+
+
+
+
 
 void setup() {
   // Initialize signal pin to Uno
@@ -190,12 +206,19 @@ void loop() {
   // Read and process pressure sensor data non-blocking
   unsigned long currentTime = millis();
   if (currentTime - lastPressureUpdate >= PRESSURE_UPDATE_INTERVAL) {
-    for (int i = 0; i < NUM_SENSORS; i++) {
+    // Use NUM_SENSORS -1 to exclude the thermocouple
+    for (int i = 0; i < NUM_SENSORS -1; i++) {
       rawValues[i] = analogRead(sensorPins[i]);
       voltages[i] = (rawValues[i] / 1023.0) * 5.0;
       Pressures[i] = voltages[i] * 50.69 - 22.95;
     }
-    
+
+    // For the thermocouple
+    rawValues[5] = analogRead(sensorPins[5]);
+    voltages[5] = rawValues[5] * (AREF / (pow(2, ADC_RESOLUTION)-1));
+    temperature = (voltages[5] - 1.25) / 0.005;
+    temp_conversion = (temperature * 9 / 5) + 32;
+
     // Always log pressure data
     Serial.print("PT,");
     if (sequenceRunning) {
@@ -207,12 +230,12 @@ void loop() {
       Serial.print("-");
     }
     Serial.print(",");
-    for (int i = 0; i < NUM_SENSORS; i++) {
+    for (int i = 0; i < NUM_SENSORS -1; i++) {
       Serial.print(Pressures[i], 2);
-      if (i < NUM_SENSORS - 1) Serial.print(",");
+      if (i < NUM_SENSORS - 1) Serial.print(","); 
     }
+    Serial.print(temp_conversion); // temp in Fahrenheit
     Serial.println();
-
     lastPressureUpdate = currentTime;
   }
 }
