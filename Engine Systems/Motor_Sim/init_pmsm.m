@@ -5,7 +5,8 @@ if nargin < 2, setSolver = false; end
 
 %% ---------- Design choices ----------
 fSVPWM   = 10e3;                  % Hz
-Ts_ctrl  = 1/fSVPWM;              % s (current loop & SVPWM)
+%% Ts_ctrl  = 1/fSVPWM;              % s (current loop & SVPWM)
+Ts_ctrl = 2.5e-5;
 doubleUpdate = false;
 Ts_svpwm = doubleUpdate * Ts_ctrl/2 + ~doubleUpdate * Ts_ctrl;
 Ts_speed = 1e-4;                  % s (speed loop)
@@ -25,7 +26,7 @@ K_lambda = 2/(3*p*lambda_m);
 K_pump    = 1e-4;                 % N·m·s^2 (quadratic torque coeff)
 B_pump    = 1e-3;                 % N·m·s   (viscous)
 Tc_pump   = 1e-2;                 % N·m     (Coulomb)
-
+I_rated   = 2200;
 % Stimuli
 w_cmd_rps = 2*pi*50;
 Tload     = 0.0;
@@ -59,6 +60,7 @@ assignin('base','K_pump',   K_pump);
 assignin('base','B_pump',   B_pump);
 assignin('base','Tc_pump',  Tc_pump);
 assignin('base', 'K_lambda', K_lambda);
+assignin('base', 'Ts_ctrl', Ts_ctrl.Value);
 
 %% ---------- Solver (only when allowed; PostLoadFcn/InitFcn) ----------
 if setSolver
