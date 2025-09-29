@@ -10,6 +10,7 @@ Ts_ctrl = 2.5e-5;
 doubleUpdate = false;
 Ts_svpwm = doubleUpdate * Ts_ctrl/2 + ~doubleUpdate * Ts_ctrl;
 Ts_speed = 1e-4;                  % s (speed loop)
+v_rated = 507;
 
 % Motor parameters
 Vdc       = 48;
@@ -43,7 +44,7 @@ fSVPWM   = Simulink.Parameter(fSVPWM);
 Ts_ctrl  = Simulink.Parameter(Ts_ctrl);
 Ts_svpwm = Simulink.Parameter(Ts_svpwm);
 Ts_speed = Simulink.Parameter(Ts_speed);
-
+v_rated = Simulink.Parameter(v_rated);
 % pump-load
 K_pump = Simulink.Parameter(K_pump);
 B_pump = Simulink.Parameter(B_pump);
@@ -61,7 +62,7 @@ assignin('base','B_pump',   B_pump);
 assignin('base','Tc_pump',  Tc_pump);
 assignin('base', 'K_lambda', K_lambda);
 assignin('base', 'Ts_ctrl', Ts_ctrl.Value);
-
+assignin('base', 'v_rated', v_rated.Value);
 %% ---------- Solver (only when allowed; PostLoadFcn/InitFcn) ----------
 if setSolver
     try, set_param(model,'FastRestart','off'); end
