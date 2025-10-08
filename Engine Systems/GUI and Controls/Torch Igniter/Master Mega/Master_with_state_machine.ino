@@ -1,5 +1,14 @@
-// Define the number of pressure transducers plus thermocouple (A5)
+#include <avr/wdt.h>
+
+// Define the number of pressure transducers
 #define NUM_SENSORS 6
+
+// Define Thermocouple pin
+#define TC_PIN A5
+
+// Set to ADC pin used
+#define AREF 5 // 3.3 or 5 V
+#define ADC_RESOLUTION 10 // set to ADC bit resolution
 
 // Array of analog pins connected to the transducers (A0 to A5)
 const int sensorPins[NUM_SENSORS] = {A0, A1, A2, A3, A4, A5};
@@ -31,6 +40,18 @@ const int SEQUENCE_DWELL_TIME = 3;    // Fixed dwell time for sequence
 const int SEQUENCE_OFF_TIME = 7;      // Fixed off time for sequence
 const int SEQUENCE_RUN_DURATION = 1000;// Fixed run duration for sequence (500 ms)
 
+// ====== FUNCTION: Force everything into safe state ======
+void setAllSafe() {
+  digitalWrite(FUEL_LINE_PIN, LOW);
+  digitalWrite(FUEL_VENT_PIN, LOW);
+  digitalWrite(OX_VENT_PIN, LOW);
+  digitalWrite(NITROGEN_TANK_PIN, LOW);
+  digitalWrite(NITROGEN_LINE_PIN, LOW);
+  digitalWrite(OX_LINE_PIN, LOW);
+  digitalWrite(OX_TANK_PIN, LOW);
+  digitalWrite(signalPin, LOW);  //spark off
+}
+
 // State machine states for sequence
 enum State {
   IDLE,
@@ -60,34 +81,10 @@ bool standaloneSparkOn = false;
 
 // Non-blocking pressure reading timer
 unsigned long lastPressureUpdate = 0;
-const unsigned long PRESSURE_UPDATE_INTERVAL = 10; // Update pressure every 50 ms
+const unsigned long PRESSURE_UPDATE_INTERVAL = 10; // Update pressure every 10 ms
 unsigned long sequenceStartTime = 0; // To track when the sequence starts for timestamps
 
-
-// Define Thermocouple pin
-#define TC_PIN A5
-// Set to ADC pin used
-#define AREF 5 // 3.3 or 5 V
-#define ADC_RESOLUTION 10 // set to ADC bit resolution
-
-
-
-
-
-
-
-
 void setup() {
-  // Initialize signal pin to Uno
-  pinMode(signalPin, OUTPUT);
-  digitalWrite(signalPin, LOW);
-
-  // Initialize serial communication at 115200 baud rate
-  Serial.begin(115200);
-  while (!Serial) {
-    ; // Wait for serial port to connect (Mega)
-  }
-  Serial.println("System Ready. Commands: 'a'-'p' for SSRs, 'startSeq' to start sequence, 'start dwell off duration' for spark only.");
 
   // Set SSR pins as outputs and turn off initially
   pinMode(FUEL_LINE_PIN, OUTPUT);
@@ -97,148 +94,41 @@ void setup() {
   pinMode(NITROGEN_LINE_PIN, OUTPUT);
   pinMode(OX_LINE_PIN, OUTPUT);
   pinMode(OX_TANK_PIN, OUTPUT);
-  digitalWrite(FUEL_LINE_PIN, LOW);
-  digitalWrite(FUEL_VENT_PIN, LOW);
-  digitalWrite(OX_VENT_PIN, LOW);
-  digitalWrite(NITROGEN_TANK_PIN, LOW);
-  digitalWrite(NITROGEN_LINE_PIN, LOW);
-  digitalWrite(OX_LINE_PIN, LOW);
-  digitalWrite(OX_TANK_PIN, LOW);
+  pinMode(signalPin, OUTPUT);   // Initialize signal pin to Uno
+
+  // Make sure valves/spark are off on startup
+  setAllSafe();
+
+  // Initialize serial communication at 115200 baud rate
+  Serial.begin(115200);
+  while (!Serial) {
+    ; // Wait for serial port to connect (Mega)
+  }
+  Serial.println("System Ready.");
+  Serial.println("Commands: 'a'-'p' for SSRs, 'startSeq' to start sequence, 'start dwell off duration' for spark only.");
+
+  // Enable watchdog with 2s timeout
+  wdt_enable(WDTO_2S);
 }
 
 void loop() {
+
+  // Reset watchdog every pass to prevent reset
+  wdt_reset();
+
   // Handle state machine for sequence
   runStateMachine();
 
   // Handle standalone spark cycle
   runStandaloneSpark();
 
-  // Check for serial input
-  if (Serial.available() > 0) {
-    String command = Serial.readStringUntil('\n');
-    command.trim();
+  // Handle serial commands
+  handleSerialCommands();
 
-    // Process SSR commands
-    if (command == "a") { digitalWrite(FUEL_LINE_PIN, HIGH); }
-    else if (command == "b") { digitalWrite(FUEL_LINE_PIN, LOW); }
-    else if (command == "c") { digitalWrite(FUEL_VENT_PIN, HIGH); }
-    else if (command == "d") { digitalWrite(FUEL_VENT_PIN, LOW); }
-    else if (command == "e") { digitalWrite(OX_VENT_PIN, HIGH); }
-    else if (command == "f") { digitalWrite(OX_VENT_PIN, LOW); }
-    else if (command == "g") { digitalWrite(NITROGEN_TANK_PIN, HIGH); }
-    else if (command == "h") { digitalWrite(NITROGEN_TANK_PIN, LOW); }
-    else if (command == "i") { digitalWrite(NITROGEN_LINE_PIN, HIGH); }
-    else if (command == "j") { digitalWrite(NITROGEN_LINE_PIN, LOW); }
-    else if (command == "k") { digitalWrite(OX_LINE_PIN, HIGH); }
-    else if (command == "l") { digitalWrite(OX_LINE_PIN, LOW); }
-    else if (command == "m") { digitalWrite(OX_TANK_PIN, HIGH); }
-    else if (command == "n") { digitalWrite(OX_TANK_PIN, LOW); }
-    else if (command == "o") {
-      digitalWrite(FUEL_LINE_PIN, HIGH);
-      digitalWrite(FUEL_VENT_PIN, HIGH);
-      digitalWrite(OX_VENT_PIN, HIGH);
-      digitalWrite(NITROGEN_TANK_PIN, HIGH);
-      digitalWrite(NITROGEN_LINE_PIN, HIGH);
-      digitalWrite(OX_LINE_PIN, HIGH);
-      digitalWrite(OX_TANK_PIN, HIGH);
-    }
-    else if (command == "p") {
-      digitalWrite(FUEL_LINE_PIN, LOW);
-      digitalWrite(FUEL_VENT_PIN, LOW);
-      digitalWrite(OX_VENT_PIN, LOW);
-      digitalWrite(NITROGEN_TANK_PIN, LOW);
-      digitalWrite(NITROGEN_LINE_PIN, LOW);
-      digitalWrite(OX_LINE_PIN, LOW);
-      digitalWrite(OX_TANK_PIN, LOW);
-    }
-    // Start the sequence
-    else if (command == "startSeq") {
-      if (!sequenceRunning && !standaloneSparkRunning) {
-        currentState = PREP;
-        sequenceRunning = true;
-        stateStartTime = millis();
-        sequenceStartTime = millis(); // Record sequence start time for timestamps
-        // Set fixed spark timing for sequence
-        currentDwellTime = SEQUENCE_DWELL_TIME;
-        currentOffTime = SEQUENCE_OFF_TIME;
-        currentRunDuration = SEQUENCE_RUN_DURATION;
-        Serial.println("PREP: Oxygen Vent and Fuel Vent ON");
-      } else {
-        Serial.println("Sequence or standalone spark already running.");
-      }
-    }
-    // Process spark cycle command (standalone)
-    else if (command.startsWith("start")) {
-      int firstSpace = command.indexOf(' ');
-      int secondSpace = command.indexOf(' ', firstSpace + 1);
-      int thirdSpace = command.indexOf(' ', secondSpace + 1);
-      
-      if (thirdSpace == -1) {
-        Serial.println("Error: Provide dwell, off, duration (e.g., 'start 5 5 5000').");
-      } else {
-        dwellTime = command.substring(firstSpace + 1, secondSpace).toInt();
-        offTime = command.substring(secondSpace + 1, thirdSpace).toInt();
-        runDuration = command.substring(thirdSpace + 1).toInt();
-        
-        if (dwellTime <= 0 || offTime <= 0 || runDuration <= 0) {
-          Serial.println("Error: Times must be positive.");
-        } else if (!sequenceRunning && !standaloneSparkRunning) {
-          // Start a standalone spark cycle
-          standaloneSparkRunning = true;
-          standaloneSparkStartTime = millis();
-          standaloneSparkStateTime = millis();
-          standaloneSparkOn = true;
-          digitalWrite(signalPin, HIGH); // Start dwell
-          currentDwellTime = dwellTime;
-          currentOffTime = offTime;
-          currentRunDuration = runDuration;
-          Serial.println("Starting standalone spark...");
-        } else {
-          Serial.println("Sequence or standalone spark already running.");
-        }
-      }
-    }
-    else {
-      Serial.println("Invalid command.");
-    }
-  }
-
-  // Read and process pressure sensor data non-blocking
-  unsigned long currentTime = millis();
-  if (currentTime - lastPressureUpdate >= PRESSURE_UPDATE_INTERVAL) {
-    // Use NUM_SENSORS -1 to exclude the thermocouple
-    for (int i = 0; i < NUM_SENSORS -1; i++) {
-      rawValues[i] = analogRead(sensorPins[i]);
-      voltages[i] = (rawValues[i] / 1023.0) * 5.0;
-      Pressures[i] = voltages[i] * 50.69 - 22.95;
-    }
-
-    // For the thermocouple
-    rawValues[5] = analogRead(sensorPins[5]);
-    voltages[5] = rawValues[5] * (AREF / (pow(2, ADC_RESOLUTION)-1));
-    temperature = (voltages[5] - 1.25) / 0.005;
-    temp_conversion = (temperature * 9 / 5) + 32;
-
-    // Always log pressure data
-    Serial.print("PT,");
-    if (sequenceRunning) {
-      // Use timestamp (time since sequence started)
-      unsigned long timeSinceSequenceStart = currentTime - sequenceStartTime;
-      Serial.print(timeSinceSequenceStart);
-    } else {
-      // Use "-" when sequence is not running
-      Serial.print("-");
-    }
-    Serial.print(",");
-    for (int i = 0; i < NUM_SENSORS -1; i++) {
-      Serial.print(Pressures[i], 2);
-      if (i < NUM_SENSORS - 1) Serial.print(","); 
-    }
-    Serial.print(temp_conversion); // temp in Fahrenheit
-    Serial.println();
-    lastPressureUpdate = currentTime;
-  }
+  // Measure Pressure
+  updateMeasurments();
 }
+
 
 void runStateMachine() {
   if (!sequenceRunning) return; // Only run if sequence is active
@@ -379,5 +269,132 @@ void runStandaloneSpark() {
       standaloneSparkOn = true;
       standaloneSparkStateTime = currentTime;
     }
+  }
+}
+
+void handleSerialCommands() {
+  // Check for serial input
+    if (Serial.available() > 0) {
+      String command = Serial.readStringUntil('\n');
+      command.trim();
+
+      // Process SSR commands
+      if (command == "a") { digitalWrite(FUEL_LINE_PIN, HIGH); }
+      else if (command == "b") { digitalWrite(FUEL_LINE_PIN, LOW); }
+      else if (command == "c") { digitalWrite(FUEL_VENT_PIN, HIGH); }
+      else if (command == "d") { digitalWrite(FUEL_VENT_PIN, LOW); }
+      else if (command == "e") { digitalWrite(OX_VENT_PIN, HIGH); }
+      else if (command == "f") { digitalWrite(OX_VENT_PIN, LOW); }
+      else if (command == "g") { digitalWrite(NITROGEN_TANK_PIN, HIGH); }
+      else if (command == "h") { digitalWrite(NITROGEN_TANK_PIN, LOW); }
+      else if (command == "i") { digitalWrite(NITROGEN_LINE_PIN, HIGH); }
+      else if (command == "j") { digitalWrite(NITROGEN_LINE_PIN, LOW); }
+      else if (command == "k") { digitalWrite(OX_LINE_PIN, HIGH); }
+      else if (command == "l") { digitalWrite(OX_LINE_PIN, LOW); }
+      else if (command == "m") { digitalWrite(OX_TANK_PIN, HIGH); }
+      else if (command == "n") { digitalWrite(OX_TANK_PIN, LOW); }
+      else if (command == "o") {
+        digitalWrite(FUEL_LINE_PIN, HIGH);
+        digitalWrite(FUEL_VENT_PIN, HIGH);
+        digitalWrite(OX_VENT_PIN, HIGH);
+        digitalWrite(NITROGEN_TANK_PIN, HIGH);
+        digitalWrite(NITROGEN_LINE_PIN, HIGH);
+        digitalWrite(OX_LINE_PIN, HIGH);
+        digitalWrite(OX_TANK_PIN, HIGH);
+      }
+      else if (command == "p") {
+        digitalWrite(FUEL_LINE_PIN, LOW);
+        digitalWrite(FUEL_VENT_PIN, LOW);
+        digitalWrite(OX_VENT_PIN, LOW);
+        digitalWrite(NITROGEN_TANK_PIN, LOW);
+        digitalWrite(NITROGEN_LINE_PIN, LOW);
+        digitalWrite(OX_LINE_PIN, LOW);
+        digitalWrite(OX_TANK_PIN, LOW);
+      }
+      // Start the sequence
+      else if (command == "startSeq") {
+        if (!sequenceRunning && !standaloneSparkRunning) {
+          currentState = PREP;
+          sequenceRunning = true;
+          stateStartTime = millis();
+          sequenceStartTime = millis(); // Record sequence start time for timestamps
+          // Set fixed spark timing for sequence
+          currentDwellTime = SEQUENCE_DWELL_TIME;
+          currentOffTime = SEQUENCE_OFF_TIME;
+          currentRunDuration = SEQUENCE_RUN_DURATION;
+          Serial.println("PREP: Oxygen Vent and Fuel Vent ON");
+        } else {
+          Serial.println("Sequence or standalone spark already running.");
+        }
+      }
+      // Process spark cycle command (standalone)
+      else if (command.startsWith("start")) {
+        int firstSpace = command.indexOf(' ');
+        int secondSpace = command.indexOf(' ', firstSpace + 1);
+        int thirdSpace = command.indexOf(' ', secondSpace + 1);
+        
+        if (thirdSpace == -1) {
+          Serial.println("Error: Provide dwell, off, duration (e.g., 'start 5 5 5000').");
+        } else {
+          dwellTime = command.substring(firstSpace + 1, secondSpace).toInt();
+          offTime = command.substring(secondSpace + 1, thirdSpace).toInt();
+          runDuration = command.substring(thirdSpace + 1).toInt();
+          
+          if (dwellTime <= 0 || offTime <= 0 || runDuration <= 0) {
+            Serial.println("Error: Times must be positive.");
+          } else if (!sequenceRunning && !standaloneSparkRunning) {
+            // Start a standalone spark cycle
+            standaloneSparkRunning = true;
+            standaloneSparkStartTime = millis();
+            standaloneSparkStateTime = millis();
+            standaloneSparkOn = true;
+            digitalWrite(signalPin, HIGH); // Start dwell
+            currentDwellTime = dwellTime;
+            currentOffTime = offTime;
+            currentRunDuration = runDuration;
+            Serial.println("Starting standalone spark...");
+          } else {
+            Serial.println("Sequence or standalone spark already running.");
+          }
+        }
+      }
+      else {
+        Serial.println("Invalid command.");
+      }
+    }
+}
+
+void updateMeasurments() {
+  // Read and process sensor data non-blocking
+  unsigned long currentTime = millis();
+  if (currentTime - lastPressureUpdate >= PRESSURE_UPDATE_INTERVAL) {
+    for (int i = 0; i < NUM_SENSORS - 1; i++) {
+      rawValues[i] = analogRead(sensorPins[i]);
+      voltages[i] = (rawValues[i] / 1023.0) * 5.0;
+      Pressures[i] = voltages[i] * 50.69 - 22.95;
+    }
+    
+ // For the thermocouple
+    rawValues[5] = analogRead(sensorPins[5]);
+    voltages[5] = rawValues[5] * (AREF / (pow(2, ADC_RESOLUTION)-1));
+    temperature = (voltages[5] - 1.25) / 0.005;
+    temp_conversion = (temperature * 9 / 5) + 32;
+
+    // Always log pressure data
+    if (sequenceRunning) {
+      // Use timestamp (time since sequence started)
+      unsigned long timeSinceSequenceStart = currentTime - sequenceStartTime;
+      Serial.print(timeSinceSequenceStart);
+    } else {
+      // Use "-" when sequence is not running
+      Serial.print("-");
+    }
+    Serial.print(",");
+    for (int i = 0; i < NUM_SENSORS -1; i++) {
+      Serial.print(Pressures[i], 2);
+      if (i < NUM_SENSORS - 1) Serial.print(","); 
+    }
+    Serial.println(temp_conversion); // temp in Fahrenheit
+    lastPressureUpdate = currentTime;
   }
 }
