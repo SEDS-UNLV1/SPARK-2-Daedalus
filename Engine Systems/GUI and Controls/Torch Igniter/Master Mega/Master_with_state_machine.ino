@@ -64,6 +64,27 @@ enum State {
   PRESSURIZED_2
 };
 
+enum TransitionTypes {
+  PREP_TO_PRESSURIZED,
+  PRESSURIZED_TO_TEST,
+  TEST_TO_TEST_DWELL,
+  TEST_DWELL_TO_TEST_OFF,
+  TEST_OFF_TO_PURGE,
+  PURGE_TO_PRESSURIZED_2,
+  PRESSURIZED_2_TO_IDLE,
+  NUMBER_OF_TRANSITIONS
+};
+// Timers for sequence transitions
+unsigned long sequenceTransitionTimes[NUMBER_OF_TRANSITIONS] = {
+  1000, // PREP to PRESSURIZED
+  3000, // PRESSURIZED to TEST
+  1000, // TEST to TEST_DWELL
+  1000, // TEST_DWELL to TEST_OFF
+  15000, // TEST_OFF to PURGE
+  1000, // PURGE to PRESSURIZED_2
+  1000, // PRESSURIZED_2 to IDLE
+};
+
 // State machine variables for sequence
 State currentState = IDLE;
 unsigned long stateStartTime = 0; // Time when the current state started
@@ -311,6 +332,10 @@ void handleSerialCommands() {
         digitalWrite(OX_LINE_PIN, LOW);
         digitalWrite(OX_TANK_PIN, LOW);
       }
+      // Is a command for state transition time parameters
+      else {
+        parseArgs(command);
+      }
       // Start the sequence
       else if (command == "startSeq") {
         if (!sequenceRunning && !standaloneSparkRunning) {
@@ -362,6 +387,76 @@ void handleSerialCommands() {
         Serial.println("Invalid command.");
       }
     }
+}
+
+void parseArgs(String command){
+  command.trim();     // Removing leading and trailing whitespaces
+  command.toLowerCase();
+
+  char* argv[9];
+  int argc = 0;
+
+  // Using strtok_r to tokenize command into char* using whitespace as a delimitter
+  char* save;
+  char* tok = strtok_r(command, " ", &save);
+  while(tok && (int)(sizeof(argv)/sizeof(argv[0]))){
+    argv[argc++] = tok;
+    tok = strtok_r(nullptr, " ", &save);
+  }
+
+  // Check command mode, sequencing or spark standalone test
+  bool isSequence = false;
+  // Sequencing mode
+  if(strcmp(argv[0], "startseq") != 0){
+    Serial.println("Sequencing mode");
+    isSequence = true;
+  }
+  else if(strcmp(argv[0], "standalone") != 0){
+    Serial.println("Standalone mode");
+    isSequence = false;
+    standaloneSparkRunning = true;
+  }
+  else {
+    // Error, wrong input command
+    Serial.println("Error: Invalid command.");
+  }
+
+  // parse tokenized command
+  for (int i = 0; i < argc; i++){
+    TransitionTypes transitionType = getTransitionType(argv[i]);
+
+    bool isStandaloneType = transitionType & TEST_TO_TEST_DWELL || transitionType & TEST_DWELL_TO_TEST_OFF || transitionType & TEST_OFF_TO_PURGE;
+    // Sequencing mode
+    if(transitionType != NUMBER_OF_TRANSITIONS && isSequence){
+      if(i+1 < argc){
+        sequenceTransitionTimes[transitionType] = atoi(argv[i+1]);
+      }
+      else {
+        Serial.println("Error: No " + String(transitionType) + " time provided. Using default of " + sequenceTransitionTimes[transitionType]);
+      }
+    }
+  
+    // Standalone mode
+    else if(transitionType != NUMBER_OF_TRANSITIONS && !isSequence){
+      if(i+1 < argc){
+        standaloneTransitionTimes[transitionType] = atoi(argv[i+1]);
+      }
+      else {
+       if(isStandaloneType) Serial.println("Error: No " + String(transitionType) + " time provided. Using default of " + standaloneTransitionTimes[transitionType]);
+      }
+    }
+  }
+}
+
+TransitionTypes getTransitionType(const char* flagName){
+  if(strcmp(flagName, "--preptopressurized") == 0) return PREP_TO_PRESSURIZED;
+  else if(strcmp(flagName, "--pressurizedtotest") == 0) return PRESSURIZED_TO_TEST;
+  else if(strcmp(flagName, "--testdwelltime") == 0) return TEST_TO_TEST_DWELL;
+  else if(strcmp(flagName, "--testdwelltotestoff") == 0) return TEST_DWELL_TO_TEST_OFF;
+  else if(strcmp(flagName, "--testofftopurge") == 0) return TEST_OFF_TO_PURGE;
+  else if(strcmp(flagName, "--purgetopressurized2") == 0) return PURGE_TO_PRESSURIZED_2;
+  else if(strcmp(flagName, "--pressurized2toidle") == 0) return PRESSURIZED_2_TO_IDLE;
+  else return NUMBER_OF_TRANSITIONS;
 }
 
 void updateMeasurments() {
