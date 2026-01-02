@@ -58,8 +58,8 @@ enum State {
   PREP,
   PRESSURIZED,
   TEST,
-  TEST_DWELL,    // Sub-state for spark dwell
-  TEST_OFF,      // Sub-state for spark off
+  SPARK_TEST_DWELL,    // Sub-state for spark dwell
+  SPARK_TEST_OFF,      // Sub-state for spark off
   PURGE,
   PRESSURIZED_2
 };
@@ -290,6 +290,7 @@ void runStandaloneSpark() {
 }
 
 void handleSerialCommands() {
+  bool isSequence = false;
   // Check for serial input
     if (Serial.available() > 0) {
       String command = Serial.readStringUntil('\n');
@@ -337,15 +338,10 @@ void handleSerialCommands() {
       }
       else if(command.length() > 1){
         // Is a command for state transition time parameters
-        parseArgs(command);
+        isSequence = parseArgs(command);
       }
-
-      if (!sequenceRunning && !standaloneSparkRunning){
-
-      }
-      // Start the sequence
-      else if (command == "startSeq") {
-        if (!sequenceRunning && !standaloneSparkRunning) {
+      if (isSequence){
+        if (!sequenceRunning && !standaloneSparkRunning){
           currentState = PREP;
           sequenceRunning = true;
           stateStartTime = millis();
@@ -359,44 +355,26 @@ void handleSerialCommands() {
           Serial.println("Sequence or standalone spark already running.");
         }
       }
-      // Process spark cycle command (standalone)
-      else if (command.startsWith("start")) {
-        int firstSpace = command.indexOf(' ');
-        int secondSpace = command.indexOf(' ', firstSpace + 1);
-        int thirdSpace = command.indexOf(' ', secondSpace + 1);
-        
-        if (thirdSpace == -1) {
-          Serial.println("Error: Provide dwell, off, duration (e.g., 'start 5 5 5000').");
-        } else {
-          dwellTime = command.substring(firstSpace + 1, secondSpace).toInt();
-          offTime = command.substring(secondSpace + 1, thirdSpace).toInt();
-          runDuration = command.substring(thirdSpace + 1).toInt();
-          
-          if (dwellTime <= 0 || offTime <= 0 || runDuration <= 0) {
-            Serial.println("Error: Times must be positive.");
-          } else if (!sequenceRunning && !standaloneSparkRunning) {
-            // Start a standalone spark cycle
-            standaloneSparkRunning = true;
-            standaloneSparkStartTime = millis();
-            standaloneSparkStateTime = millis();
-            standaloneSparkOn = true;
-            digitalWrite(signalPin, HIGH); // Start dwell
-            sparkDwellTime = dwellTime;
-            sparkOffTime = offTime;
-            currentRunDuration = runDuration;
-            Serial.println("Starting standalone spark...");
-          } else {
-            Serial.println("Sequence or standalone spark already running.");
-          }
-        }
-      }
       else {
-        Serial.println("Invalid command.");
+        if (!sequenceRunning && !standaloneSparkRunning){
+          // Start a standalone spark cycle
+          standaloneSparkRunning = true;
+          standaloneSparkStartTime = millis();
+          standaloneSparkStateTime = millis();
+          standaloneSparkOn = true;
+          digitalWrite(signalPin, HIGH); // Start dwell
+          sparkDwellTime = dwellTime;
+          sparkOffTime = offTime;
+          currentRunDuration = runDuration;
+          Serial.println("Starting standalone spark...");
+        } else {
+          Serial.println("Sequence or standalone spark already running.");
+        }
       }
     }
 }
 
-void parseArgs(String command){
+bool parseArgs(String command){
   command.trim();     // Removing leading and trailing whitespaces
   command.toLowerCase();
 
@@ -465,6 +443,7 @@ void parseArgs(String command){
   }
 }
 
+//  StartSeq --prepToPressurized 3000 --pressurizedToTest 15000 --testToPurge 1000 --purgeToPressurized2 1000 --pressurized2ToIdle 1000
 TransitionTypes getTransitionType(const char* flagName){
   if(strcmp(flagName, "--preptopressurized") == 0) return PREP_TO_PRESSURIZED;
   else if(strcmp(flagName, "--pressurizedtotest") == 0) return PRESSURIZED_TO_TEST;
