@@ -67,9 +67,7 @@ enum State {
 enum TransitionTypes {
   PREP_TO_PRESSURIZED,
   PRESSURIZED_TO_TEST,
-  TEST_TO_TEST_DWELL,
-  TEST_DWELL_TO_TEST_OFF,
-  TEST_OFF_TO_PURGE,
+  TEST_TO_PURGE,
   PURGE_TO_PRESSURIZED_2,
   PRESSURIZED_2_TO_IDLE,
   NUMBER_OF_TRANSITIONS
@@ -78,9 +76,7 @@ enum TransitionTypes {
 unsigned long sequenceTransitionTimes[NUMBER_OF_TRANSITIONS] = {
   1000, // PREP to PRESSURIZED
   3000, // PRESSURIZED to TEST
-  1000, // TEST to TEST_DWELL
-  1000, // TEST_DWELL to TEST_OFF
-  15000, // TEST_OFF to PURGE
+  15000, // TEST to PURGE
   1000, // PURGE to PRESSURIZED_2
   1000, // PRESSURIZED_2 to IDLE
 };
@@ -90,8 +86,8 @@ State currentState = IDLE;
 unsigned long stateStartTime = 0; // Time when the current state started
 bool sequenceRunning = false;     // Flag to indicate if a sequence is active
 unsigned long sparkStartTime = 0; // For tracking spark cycle in TEST state
-int currentDwellTime = dwellTime; // Current dwell time (sequence or standalone)
-int currentOffTime = offTime;     // Current off time (sequence or standalone)
+int sparkDwellTime = dwellTime; // Current dwell time (sequence or standalone)
+int sparkOffTime = offTime;     // Current off time (sequence or standalone)
 int currentRunDuration = runDuration; // Current run duration (sequence or standalone)
 
 // Variables for standalone spark cycle (non-blocking)
@@ -209,7 +205,7 @@ void runStateMachine() {
       break;
 
     case TEST_DWELL:
-      if (currentTime - stateStartTime >= currentDwellTime) {
+      if (currentTime - stateStartTime >= sparkDwellTime) {
         digitalWrite(signalPin, LOW); // End dwell, start off
         currentState = TEST_OFF;
         stateStartTime = currentTime;
@@ -217,7 +213,7 @@ void runStateMachine() {
       break;
 
     case TEST_OFF:
-      if (currentTime - stateStartTime >= currentOffTime) {
+      if (currentTime - stateStartTime >= sparkOffTime) {
         // Check if spark cycle duration is complete
         if (currentTime - sparkStartTime >= currentRunDuration) {
           digitalWrite(signalPin, LOW); // Ensure spark is off
@@ -279,13 +275,13 @@ void runStandaloneSpark() {
 
   // Toggle between dwell (on) and off states
   if (standaloneSparkOn) {
-    if (currentTime - standaloneSparkStateTime >= currentDwellTime) {
+    if (currentTime - standaloneSparkStateTime >= sparkDwellTime) {
       digitalWrite(signalPin, LOW); // End dwell, start off
       standaloneSparkOn = false;
       standaloneSparkStateTime = currentTime;
     }
   } else {
-    if (currentTime - standaloneSparkStateTime >= currentOffTime) {
+    if (currentTime - standaloneSparkStateTime >= sparkOffTime) {
       digitalWrite(signalPin, HIGH); // Start next dwell
       standaloneSparkOn = true;
       standaloneSparkStateTime = currentTime;
@@ -299,42 +295,53 @@ void handleSerialCommands() {
       String command = Serial.readStringUntil('\n');
       command.trim();
 
+      if(command.length() == 1){
       // Process SSR commands
-      if (command == "a") { digitalWrite(FUEL_LINE_PIN, HIGH); }
-      else if (command == "b") { digitalWrite(FUEL_LINE_PIN, LOW); }
-      else if (command == "c") { digitalWrite(FUEL_VENT_PIN, HIGH); }
-      else if (command == "d") { digitalWrite(FUEL_VENT_PIN, LOW); }
-      else if (command == "e") { digitalWrite(OX_VENT_PIN, HIGH); }
-      else if (command == "f") { digitalWrite(OX_VENT_PIN, LOW); }
-      else if (command == "g") { digitalWrite(NITROGEN_TANK_PIN, HIGH); }
-      else if (command == "h") { digitalWrite(NITROGEN_TANK_PIN, LOW); }
-      else if (command == "i") { digitalWrite(NITROGEN_LINE_PIN, HIGH); }
-      else if (command == "j") { digitalWrite(NITROGEN_LINE_PIN, LOW); }
-      else if (command == "k") { digitalWrite(OX_LINE_PIN, HIGH); }
-      else if (command == "l") { digitalWrite(OX_LINE_PIN, LOW); }
-      else if (command == "m") { digitalWrite(OX_TANK_PIN, HIGH); }
-      else if (command == "n") { digitalWrite(OX_TANK_PIN, LOW); }
-      else if (command == "o") {
-        digitalWrite(FUEL_LINE_PIN, HIGH);
-        digitalWrite(FUEL_VENT_PIN, HIGH);
-        digitalWrite(OX_VENT_PIN, HIGH);
-        digitalWrite(NITROGEN_TANK_PIN, HIGH);
-        digitalWrite(NITROGEN_LINE_PIN, HIGH);
-        digitalWrite(OX_LINE_PIN, HIGH);
-        digitalWrite(OX_TANK_PIN, HIGH);
+        switch(command){
+          case 'a': digitalWrite(FUEL_LINE_PIN, HIGH); break;
+          case 'b': digitalWrite(FUEL_LINE_PIN, LOW); break;
+          case 'c': digitalWrite(FUEL_VENT_PIN, HIGH); break;
+          case 'd': digitalWrite(FUEL_VENT_PIN, LOW); break;
+          case 'e': digitalWrite(OX_VENT_PIN, HIGH); break;
+          case 'f': digitalWrite(OX_VENT_PIN, LOW); break;
+          case 'g': digitalWrite(NITROGEN_TANK_PIN, HIGH); break;
+          case 'h': digitalWrite(NITROGEN_TANK_PIN, LOW); break;
+          case 'i': digitalWrite(NITROGEN_LINE_PIN, HIGH); break;
+          case 'j': digitalWrite(NITROGEN_LINE_PIN, LOW); break;
+          case 'k': digitalWrite(OX_LINE_PIN, HIGH); break;
+          case 'l': digitalWrite(OX_LINE_PIN, LOW); break;
+          case 'm': digitalWrite(OX_TANK_PIN, HIGH); break;
+          case 'n': digitalWrite(OX_TANK_PIN, LOW); break;
+          case 'o':
+            digitalWrite(FUEL_LINE_PIN, HIGH);
+            digitalWrite(FUEL_VENT_PIN, HIGH);
+            digitalWrite(OX_VENT_PIN, HIGH);
+            digitalWrite(NITROGEN_TANK_PIN, HIGH);
+            digitalWrite(NITROGEN_LINE_PIN, HIGH);
+            digitalWrite(OX_LINE_PIN, HIGH);
+            digitalWrite(OX_TANK_PIN, HIGH);
+            break;
+          case 'p':
+            digitalWrite(FUEL_LINE_PIN, LOW);
+            digitalWrite(FUEL_VENT_PIN, LOW);
+            digitalWrite(OX_VENT_PIN, LOW);
+            digitalWrite(NITROGEN_TANK_PIN, LOW);
+            digitalWrite(NITROGEN_LINE_PIN, LOW);
+            digitalWrite(OX_LINE_PIN, LOW);
+            digitalWrite(OX_TANK_PIN, LOW);
+            break;
+          default:
+            Serial.println("Invalid one letter SSR command.");
+            break;
+        }
       }
-      else if (command == "p") {
-        digitalWrite(FUEL_LINE_PIN, LOW);
-        digitalWrite(FUEL_VENT_PIN, LOW);
-        digitalWrite(OX_VENT_PIN, LOW);
-        digitalWrite(NITROGEN_TANK_PIN, LOW);
-        digitalWrite(NITROGEN_LINE_PIN, LOW);
-        digitalWrite(OX_LINE_PIN, LOW);
-        digitalWrite(OX_TANK_PIN, LOW);
-      }
-      // Is a command for state transition time parameters
-      else {
+      else if(command.length() > 1){
+        // Is a command for state transition time parameters
         parseArgs(command);
+      }
+
+      if (!sequenceRunning && !standaloneSparkRunning){
+
       }
       // Start the sequence
       else if (command == "startSeq") {
@@ -344,8 +351,8 @@ void handleSerialCommands() {
           stateStartTime = millis();
           sequenceStartTime = millis(); // Record sequence start time for timestamps
           // Set fixed spark timing for sequence
-          currentDwellTime = SEQUENCE_DWELL_TIME;
-          currentOffTime = SEQUENCE_OFF_TIME;
+          sparkDwellTime = SEQUENCE_DWELL_TIME;
+          sparkOffTime = SEQUENCE_OFF_TIME;
           currentRunDuration = SEQUENCE_RUN_DURATION;
           Serial.println("PREP: Oxygen Vent and Fuel Vent ON");
         } else {
@@ -374,8 +381,8 @@ void handleSerialCommands() {
             standaloneSparkStateTime = millis();
             standaloneSparkOn = true;
             digitalWrite(signalPin, HIGH); // Start dwell
-            currentDwellTime = dwellTime;
-            currentOffTime = offTime;
+            sparkDwellTime = dwellTime;
+            sparkOffTime = offTime;
             currentRunDuration = runDuration;
             Serial.println("Starting standalone spark...");
           } else {
@@ -427,22 +434,32 @@ void parseArgs(String command){
 
     bool isStandaloneType = transitionType & TEST_TO_TEST_DWELL || transitionType & TEST_DWELL_TO_TEST_OFF || transitionType & TEST_OFF_TO_PURGE;
     // Sequencing mode
-    if(transitionType != NUMBER_OF_TRANSITIONS && isSequence){
-      if(i+1 < argc){
-        sequenceTransitionTimes[transitionType] = atoi(argv[i+1]);
+    if(isSequence){
+      if(transitionType != NUMBER_OF_TRANSITIONS){
+        if(i+1 < argc){
+          sequenceTransitionTimes[transitionType] = atoi(argv[i+1]);
+        }
+        else {
+          Serial.println("Error: No " + String(transitionType) + " time provided. Using default of " + sequenceTransitionTimes[transitionType]);
+        }
       }
       else {
-        Serial.println("Error: No " + String(transitionType) + " time provided. Using default of " + sequenceTransitionTimes[transitionType]);
+        Serial.println("Error: Invalid transition type.");
       }
     }
-  
     // Standalone mode
-    else if(transitionType != NUMBER_OF_TRANSITIONS && !isSequence){
-      if(i+1 < argc){
-        standaloneTransitionTimes[transitionType] = atoi(argv[i+1]);
+    else {
+      if(strcmp(argv[i], "--sparkdwelltime") == 0) {
+        if(i+1 < argc) sparkDwellTime = atoi(argv[i+1]);
+        else {
+          Serial.println("Error: No dwell time provided. Using default of " + String(sparkDwellTime));
+        }
       }
-      else {
-       if(isStandaloneType) Serial.println("Error: No " + String(transitionType) + " time provided. Using default of " + standaloneTransitionTimes[transitionType]);
+      if(strcmp(argv[i], "--sparkdwelltime") == 0) {
+        if(i+1 < argc) sparkDwellTime = atoi(argv[i+1]);
+        else {
+          Serial.println("Error: No dwell time provided. Using default of " + String(sparkDwellTime));
+        }
       }
     }
   }
@@ -451,9 +468,7 @@ void parseArgs(String command){
 TransitionTypes getTransitionType(const char* flagName){
   if(strcmp(flagName, "--preptopressurized") == 0) return PREP_TO_PRESSURIZED;
   else if(strcmp(flagName, "--pressurizedtotest") == 0) return PRESSURIZED_TO_TEST;
-  else if(strcmp(flagName, "--testdwelltime") == 0) return TEST_TO_TEST_DWELL;
-  else if(strcmp(flagName, "--testdwelltotestoff") == 0) return TEST_DWELL_TO_TEST_OFF;
-  else if(strcmp(flagName, "--testofftopurge") == 0) return TEST_OFF_TO_PURGE;
+  else if(strcmp(flagName, "--testtopurge") == 0) return TEST_TO_PURGE;
   else if(strcmp(flagName, "--purgetopressurized2") == 0) return PURGE_TO_PRESSURIZED_2;
   else if(strcmp(flagName, "--pressurized2toidle") == 0) return PRESSURIZED_2_TO_IDLE;
   else return NUMBER_OF_TRANSITIONS;
