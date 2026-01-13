@@ -460,7 +460,8 @@ bool parseArgs(char* command) {
   }
 
   // parse tokenized command
-  for (int i = 0; i < argc; i++) {
+  for (int i = 1; i < argc; i++) {
+    Serial.println("argv[i]: " + String(argv[i]));
     TransitionTypes transitionType = getTransitionType(argv[i]);
 
     // bool isStandaloneType = transitionType & TEST_TO_TEST_DWELL ||
@@ -470,6 +471,7 @@ bool parseArgs(char* command) {
       if (transitionType != NUMBER_OF_TRANSITIONS) {
         if (i + 1 < argc) {
           sequenceTransitionTimes[transitionType] = atoi(argv[i + 1]);
+          i++;     // Increment i to skip the value
         } else {
           Serial.println("Error: No " + String(transitionType) +
                          " time provided. Using default of " +
