@@ -1,5 +1,8 @@
 #include <avr/wdt.h>
 
+// For ESP32 connection
+#define LINK Serial1     // change to Serial for USB
+
 // Define the number of pressure transducers
 #define NUM_SENSORS 6
 
@@ -102,11 +105,15 @@ void setup() {
 
   // Initialize serial communication at 115200 baud rate
   Serial.begin(115200);
-  while (!Serial) {
-    ; // Wait for serial port to connect (Mega)
-  }
-  Serial.println("System Ready.");
-  Serial.println("Commands: 'a'-'p' for SSRs, 'startSeq' to start sequence, 'start dwell off duration' for spark only.");
+
+  // Initialize esp communication
+  LINK.begin(115200);
+  
+  // while (!Serial) {
+  //   ; // Wait for serial port to connect (Mega)
+  // }
+  LINK.println("System Ready.");
+  LINK.println("Commands: 'a'-'p' for SSRs, 'startSeq' to start sequence, 'start dwell off duration' for spark only.");
 
   // Enable watchdog with 2s timeout
   wdt_enable(WDTO_2S);
@@ -124,7 +131,7 @@ void loop() {
     sequenceRunning = false;
     currentState    = IDLE;
     setAllSafe();
-    Serial.println("ABORT: link lost");
+    LINK.println("ABORT: link lost");
   }
 
   // Handle standalone spark cycle
@@ -164,7 +171,7 @@ void runStateMachine() {
       if (currentTime - stateStartTime >= 1000) {
         currentState = PRESSURIZED;
         stateStartTime = currentTime;
-        Serial.println("PRESSURIZED: Oxygen Tank, Nitrogen Tank, Oxygen Vent, Fuel Vent ON");
+        LINK.println("PRESSURIZED: Oxygen Tank, Nitrogen Tank, Oxygen Vent, Fuel Vent ON");
       }
       break;
 
@@ -178,7 +185,7 @@ void runStateMachine() {
         currentState = TEST;
         stateStartTime = currentTime;
         sparkStartTime = currentTime;
-        Serial.println("TEST: Oxygen Tank, Nitrogen Tank, Oxygen Vent, Fuel Vent, Oxygen Line, Fuel Line ON, Igniting...");
+        LINK.println("TEST: Oxygen Tank, Nitrogen Tank, Oxygen Vent, Fuel Vent, Oxygen Line, Fuel Line ON, Igniting...");
       }
       break;
 
@@ -210,7 +217,7 @@ void runStateMachine() {
           digitalWrite(signalPin, LOW); // Ensure spark is off
           currentState = PURGE;
           stateStartTime = currentTime;
-          Serial.println("PURGE: Oxygen Tank, Nitrogen Tank, Oxygen Vent, Fuel Vent, Nitrogen Line ON");
+          LINK.println("PURGE: Oxygen Tank, Nitrogen Tank, Oxygen Vent, Fuel Vent, Nitrogen Line ON");
         } else {
           // Continue sparking
           currentState = TEST_DWELL;
@@ -232,7 +239,7 @@ void runStateMachine() {
       if (currentTime - stateStartTime >= 15000) {
         currentState = PRESSURIZED_2;
         stateStartTime = currentTime;
-        Serial.println("PRESSURIZED_2: Oxygen Tank, Nitrogen Tank, Oxygen Vent, Fuel Vent ON");
+        LINK.println("PRESSURIZED_2: Oxygen Tank, Nitrogen Tank, Oxygen Vent, Fuel Vent ON");
       }
       break;
 
@@ -246,7 +253,7 @@ void runStateMachine() {
       if (currentTime - stateStartTime >= 1000) {
         currentState = IDLE;
         stateStartTime = currentTime;
-        Serial.println("Sequence ended");
+        LINK.println("Sequence ended");
       }
       break;
   }
@@ -282,8 +289,8 @@ void runStandaloneSpark() {
 
 void handleSerialCommands() {
   // Check for serial input
-    if (Serial.available() > 0) {
-      String command = Serial.readStringUntil('\n');
+    if (LINK.available() > 0) {
+      String command = LINK.readStringUntil('\n');
       command.trim();
 
       // Process SSR commands
@@ -324,7 +331,7 @@ void handleSerialCommands() {
         standaloneSparkRunning = false;
         currentState           = IDLE;
         setAllSafe();
-        Serial.println("ABORT: all outputs safe");
+        LINK.println("ABORT: all outputs safe");
       }
       else if (command == "~") { lastHeartBeat = millis(); }
       // Start the sequence
@@ -339,9 +346,9 @@ void handleSerialCommands() {
           currentDwellTime = SEQUENCE_DWELL_TIME;
           currentOffTime = SEQUENCE_OFF_TIME;
           currentRunDuration = SEQUENCE_RUN_DURATION;
-          Serial.println("PREP: Oxygen Vent and Fuel Vent ON");
+          LINK.println("PREP: Oxygen Vent and Fuel Vent ON");
         } else {
-          Serial.println("Sequence or standalone spark already running.");
+          LINK.println("Sequence or standalone spark already running.");
         }
       }
       // Process spark cycle command (standalone)
@@ -351,14 +358,14 @@ void handleSerialCommands() {
         int thirdSpace = command.indexOf(' ', secondSpace + 1);
         
         if (thirdSpace == -1) {
-          Serial.println("Error: Provide dwell, off, duration (e.g., 'start 5 5 5000').");
+          LINK.println("Error: Provide dwell, off, duration (e.g., 'start 5 5 5000').");
         } else {
           dwellTime = command.substring(firstSpace + 1, secondSpace).toInt();
           offTime = command.substring(secondSpace + 1, thirdSpace).toInt();
           runDuration = command.substring(thirdSpace + 1).toInt();
           
           if (dwellTime <= 0 || offTime <= 0 || runDuration <= 0) {
-            Serial.println("Error: Times must be positive.");
+            LINK.println("Error: Times must be positive.");
           } else if (!sequenceRunning && !standaloneSparkRunning) {
             // Start a standalone spark cycle
             standaloneSparkRunning = true;
@@ -369,14 +376,14 @@ void handleSerialCommands() {
             currentDwellTime = dwellTime;
             currentOffTime = offTime;
             currentRunDuration = runDuration;
-            Serial.println("Starting standalone spark...");
+            LINK.println("Starting standalone spark...");
           } else {
-            Serial.println("Sequence or standalone spark already running.");
+            LINK.println("Sequence or standalone spark already running.");
           }
         }
       }
       else {
-        Serial.println("Invalid command.");
+        LINK.println("Invalid command.");
       }
     }
 }
@@ -401,34 +408,34 @@ void updateMeasurments() {
     if (sequenceRunning) {
       // Use timestamp (time since sequence started)
       unsigned long timeSinceSequenceStart = currentTime - sequenceStartTime;
-      Serial.print(timeSinceSequenceStart);
+      LINK.print(timeSinceSequenceStart);
     } else {
       // Use "-" when sequence is not running
-      Serial.print("-");
+      LINK.print("-");
     }
-    Serial.print(",");
+    LINK.print(",");
     for (int i = 0; i < NUM_SENSORS -1; i++) {
-      Serial.print(Pressures[i], 2);
-      if (i < NUM_SENSORS - 1) Serial.print(","); 
+      LINK.print(Pressures[i], 2);
+      if (i < NUM_SENSORS - 1) LINK.print(","); 
     }
-    // Serial.println(temp_conversion); // temp in Fahrenheit
-    // lastPressureUpdate = currentTime;
-    Serial.print(temp_conversion, 1); // temp in Fahrenheit
 
-    Serial.print(",");
-    Serial.print(digitalRead(FUEL_LINE_PIN));
-    Serial.print(",");
-    Serial.print(digitalRead(FUEL_VENT_PIN));
-    Serial.print(",");
-    Serial.print(digitalRead(OX_VENT_PIN));
-    Serial.print(",");
-    Serial.print(digitalRead(NITROGEN_TANK_PIN));
-    Serial.print(",");
-    Serial.print(digitalRead(NITROGEN_LINE_PIN));
-    Serial.print(",");
-    Serial.print(digitalRead(OX_LINE_PIN));
-    Serial.print(",");
-    Serial.println(digitalRead(OX_TANK_PIN));
+    
+    LINK.print(temp_conversion, 1); // temp in Fahrenheit
+
+    LINK.print(",");
+    LINK.print(digitalRead(FUEL_LINE_PIN));
+    LINK.print(",");
+    LINK.print(digitalRead(FUEL_VENT_PIN));
+    LINK.print(",");
+    LINK.print(digitalRead(OX_VENT_PIN));
+    LINK.print(",");
+    LINK.print(digitalRead(NITROGEN_TANK_PIN));
+    LINK.print(",");
+    LINK.print(digitalRead(NITROGEN_LINE_PIN));
+    LINK.print(",");
+    LINK.print(digitalRead(OX_LINE_PIN));
+    LINK.print(",");
+    LINK.println(digitalRead(OX_TANK_PIN));
 
     lastPressureUpdate = currentTime;
   }
