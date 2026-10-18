@@ -2,7 +2,6 @@
 
 CAD, code, and other analysis for **SPARK-2 Daedalus**.
 
-New to GitHub, Python, or the terminal? That's fine. This page covers the basics.
 This page will cover basic Github, Python, and terminal commands to let you start looking over the repo.
 
 ## Getting the files
