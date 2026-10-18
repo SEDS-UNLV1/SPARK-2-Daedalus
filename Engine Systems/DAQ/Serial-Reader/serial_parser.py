@@ -26,7 +26,14 @@ import synnax as sy
 # =========================
 # CONFIG
 # =========================
-SERIAL_PORT = "COM3"  # check if this needs to be changed
+
+# Serial port configuration different for windows and linux/mac
+# Windows: COM3, COM4, etc.
+# Linux/Mac: /dev/ttyUSB0, /dev/ttyACM0, etc.
+# SERIAL_PORT = "COM3"  # check if this needs to be changed
+SERIAL_PORT = "/dev/cu.usbserial-0001"  # check if this needs to be changed
+
+
 BAUD = 115200
 
 HOST = "localhost"
