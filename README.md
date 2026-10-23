@@ -24,7 +24,7 @@ This page will cover basic Github, Python, and terminal commands to let you star
 - **`GUI and Controls/`**: Arduino code for valve actuation and the torch igniter (in `Torch Igniter/`, Simulink models.
 - **`DAQ/`** (data acquisition stuff):
   - `Serial-Reader/`: Python scripts that read pressure and temperature from the Arduino and send them to [Synnax](https://www.synnaxlabs.com/) for live graphs. `Updated/` adds valve control and an optional ESP32 Wi-Fi link.
-  - `T7/`: Lua script for the LabJack T7 DAQ.
+  - `T7/`: Lua kill-switch script that runs on the LabJack T7, and `daq.py`, which reads the T7 over Ethernet for Synnax.
 
 ## Running a Python script
 
@@ -61,6 +61,7 @@ You'll see `(venv)` at the start of the line when it's on.
 | Script | Command |
 |---|---|
 | `DAQ/Serial-Reader/` scripts | `pip install pyserial synnax` |
+| `DAQ/T7/daq.py` | `pip install labjack-ljm synnax` (install LJM from [labjack.com](https://support.labjack.com/docs/software-driver) first) |
 | `GUI and Controls/gui.py` | `pip install pyserial PyQt6 matplotlib pymongo` |
 | `GUI and Controls/spark2.py` | `pip install pyserial matplotlib pymongo` |
 
