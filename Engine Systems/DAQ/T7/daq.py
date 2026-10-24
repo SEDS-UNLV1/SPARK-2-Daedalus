@@ -49,4 +49,4 @@ def connect_t7():
       time.sleep(2)
 
 
-#set up in synnax Labjack Readtask
+#set up in synnax Labjack Readtask (read through ethernet)
