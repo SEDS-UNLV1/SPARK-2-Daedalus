@@ -41,11 +41,13 @@ def connect_t7():
   while True:
     try:
       handle = ljm.openS("T7", "ETHERNET", T7_IP)
-      info = ljm.getHandleInfo(handle)
-      print(f"[INFO] Connected to T7 #{info[2]} at {ljm.numberToIP(info[3])}")
+      #TUPLE info contains (deviceType, connectionType, serialNumber, ipAddress, port, maxBytesPerMB)
+      info = ljm.getHandleInfo(handle) 
+      # print(f"[INFO] Connected to T7 #{info[2]} at {ljm.numberToIP(info[3])}")
+      print(f"[INFO] Connected to {info[0]}#{info[2]} via {info[1]} at {ljm.numberToIP(info[3])}, PORT:{info[4]}")
       return handle
     except ljm.LJMError as e:
-      print("[WARN] T7 connection failed, retrying...", e)
+      print(f"[WARN] {info[0]} connection failed, retrying...", e)
       time.sleep(2)
 
 
