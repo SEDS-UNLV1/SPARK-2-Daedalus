@@ -87,4 +87,25 @@ def connect_t7():
             ljm.closeAll()  # a failed config write would otherwise leave the handle open
             time.sleep(2)
 
-#set up in synnax Labjack Readtask (read through ethernet)
+#main, the core execution logic
+def main():
+    handle = connect_t7()
+    interval = 1  # any id, LJM only uses it to name this timer
+    ljm.startInterval(interval, round(READ_INTERVAL * 1_000_000))
+
+    while True:
+        try:
+            with client.open_writer(start=sy.TimeStamp.now(), channels=[TIME_CHANNEL, *CHANNELS]) as writer:
+                while True:
+                    skipped = ljm.waitForNextInterval(interval)
+                    if skipped:
+                        print(f"[WARN] Fell behind, skipped {skipped} reads")
+                    volts = ljm.eReadNames(handle, len(AIN), AIN)
+                    writer.write({TIME_CHANNEL: sy.TimeStamp.now(), **dict(zip(CHANNELS, volts))})
+        except ljm.LJMError as e:
+            print("[ERROR] T7 read failed, reconnecting...", e)
+            ljm.closeAll()
+            handle = connect_t7()
+
+if __name__ == "__main__":
+    main()
