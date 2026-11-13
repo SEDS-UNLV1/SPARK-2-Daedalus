@@ -3,7 +3,7 @@
 
 #Python bridge between T7 and Synnax server
 """
-    Set up connection to the synnax server hosted at 9090
+    Set up connection to Synnax Desktop
 
     retreive data stream from T7 via ethernet connection
 
@@ -39,20 +39,9 @@ for pin in AIN:
     AIN_CONFIG[f"{pin}_RANGE"] = 10.0
     AIN_CONFIG[f"{pin}_RESOLUTION_INDEX"] = 6
 
-HOST = "localhost"
-PORT_API = 9090
-
 # CONNECT TO SYNNAX
-# sy.Synnax logs in right away, make sure server is running before this
-# shortcut only reaches a standalone Core on 9090. Synnax Desktop 1.0.2 picks its own port and rotates its password,
-# switch to plain sy.Synnax() once a Desktop and client release include synnax PR #4244 
-client = sy.Synnax(
-    host=HOST,
-    port=PORT_API,
-    username="synnax",
-    password="seldon",
-    secure=False,
-)
+# open any Synnax Desktop 1.1.0+ , sy.Synnax() finds it through ~/.synnax/desktop.json (client 0.61.1+)
+client = sy.Synnax()
 print("[INFO] Connected to Synnax")
 
 # time and data channel creation if they aren't already on synnax server.
@@ -69,7 +58,6 @@ for name in CHANNELS:
         data_type=sy.DataType.FLOAT32,
         retrieve_if_name_exists=True,
     )
-
 
 # CONNECT TO T7 
 def connect_t7():
